@@ -48,6 +48,30 @@ def is_within_strathmore(location):
     # Temporarily relax filter for debugging
     return True
 
+def extract_location(item):
+    # Try several possible locations for the location field
+    if "location" in item:
+        loc = item["location"]
+        if isinstance(loc, dict):
+            # Try 'name', 'label', 'description'
+            for key in ["name", "label", "description"]:
+                if key in loc and loc[key]:
+                    return loc[key]
+            # If coordinates, return as string
+            if "coordinates" in loc:
+                return str(loc["coordinates"])
+        elif isinstance(loc, str) and loc:
+            return loc
+    # Try meta fields
+    if "meta" in item and "location" in item["meta"]:
+        return item["meta"]["location"]
+    # Try top-level fields
+    for key in ["location_name", "station_name", "site_name"]:
+        if key in item and item[key]:
+            return item[key]
+    # Fallback: empty string
+    return ""
+
 class SensorNowProxy(APIView):
     def get(self, request):
         sensor_ids = [4898, 4899, 4900, 4901, 4896]
@@ -64,19 +88,22 @@ class SensorNowProxy(APIView):
                 items = data if isinstance(data, list) else [data]
                 logger.info(f"Items for {sid}: {len(items)}")
                 for item in items:
+                    logger.info(f"Raw item for {sid}: {item}")  # Log the raw item
+                    # Use the new extract_location function
+                    location_name = extract_location(item)
                     location = item.get('location')
-                    logger.info(f"Location for {sid}: {location}")
                     if location and is_within_strathmore(location):
                         mapped_values = {}
                         for v in item.get('sensordatavalues', []):
                             key = PM_MAPPING.get(v['value_type'], v['value_type'])
                             mapped_values[key] = v['value']
-                        loc_name = location.get('name', '').strip()
+                        # Use the extracted location name for user-friendly mapping
+                        loc_name = location.get('name', '').strip() if isinstance(location, dict) else location_name
                         user_friendly_name = STATION_NAME_MAP.get(loc_name, loc_name)
                         # Save or get AirStation
                         station_obj, _ = AirStation.objects.get_or_create(
                             name=user_friendly_name,
-                            defaults={'location': f"{location.get('latitude')},{location.get('longitude')}"}
+                            defaults={'location': f"{location.get('latitude')},{location.get('longitude')}" if isinstance(location, dict) else ''}
                         )
                         # Save AirQualityReading
                         AirQualityReading.objects.create(
@@ -97,6 +124,17 @@ class SensorNowProxy(APIView):
                             'pm10': mapped_values.get('pm10'),
                             'temperature': mapped_values.get('temperature'),
                             'humidity': mapped_values.get('humidity'),
+                        })
+                    else:
+                        # If location is missing or not within bounds, still append with extracted name
+                        results.append({
+                            'location': location_name,
+                            'timestamp': item.get('timestamp'),
+                            'pm25': item.get('pm25'),
+                            'pm1': item.get('pm1'),
+                            'pm10': item.get('pm10'),
+                            'temperature': item.get('temperature'),
+                            'humidity': item.get('humidity'),
                         })
             else:
                 results.append({
