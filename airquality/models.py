@@ -10,7 +10,7 @@ class AirStation(models.Model):
 class AirQualityReading(models.Model):
     station = models.ForeignKey(AirStation, on_delete=models.CASCADE, related_name='readings')
     timestamp = models.DateTimeField(auto_now_add=True)
-    aqi = models.FloatField()
+    aqi = models.FloatField(null=True, blank=True)
     pm1 = models.FloatField()
     pm25 = models.FloatField()
     pm10 = models.FloatField()

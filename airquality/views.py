@@ -5,6 +5,8 @@ from .serializers import AirStationSerializer, AirQualityReadingSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 import requests
+import logging
+logger = logging.getLogger(__name__)
 
 # Create your views here.
 
@@ -43,13 +45,8 @@ STRATHMORE_LAT_ERROR = 0.01
 STRATHMORE_LNG_ERROR = 0.02
 
 def is_within_strathmore(location):
-    try:
-        lat = float(location['latitude'])
-        lng = float(location['longitude'])
-        return (abs(lat - STRATHMORE_CENTER['lat']) <= STRATHMORE_LAT_ERROR and
-                abs(lng - STRATHMORE_CENTER['lng']) <= STRATHMORE_LNG_ERROR)
-    except Exception:
-        return False
+    # Temporarily relax filter for debugging
+    return True
 
 class SensorNowProxy(APIView):
     def get(self, request):
@@ -61,11 +58,14 @@ class SensorNowProxy(APIView):
         for sid in sensor_ids:
             url = f'https://api.sensors.africa/v2/now/?sensor_id={sid}'
             resp = requests.get(url, headers=headers)
+            logger.info(f"Fetched for {sid}: {resp.status_code} {resp.text[:500]}")
             if resp.status_code == 200:
                 data = resp.json()
                 items = data if isinstance(data, list) else [data]
+                logger.info(f"Items for {sid}: {len(items)}")
                 for item in items:
                     location = item.get('location')
+                    logger.info(f"Location for {sid}: {location}")
                     if location and is_within_strathmore(location):
                         mapped_values = {}
                         for v in item.get('sensordatavalues', []):
