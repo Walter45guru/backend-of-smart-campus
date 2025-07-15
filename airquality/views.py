@@ -187,6 +187,24 @@ class SensorNowProxy(APIView):
                         'timestamp': ts,
                         **mapped_values
                     })
+                    # --- Save to DB ---
+                    # Get or create station
+                    station_obj, _ = AirStation.objects.get_or_create(
+                        name=meta['station'],
+                        defaults={'location': f"{meta['lat']},{meta['lon']}"}
+                    )
+                    # Save reading (if not already exists for this station and timestamp)
+                    if not AirQualityReading.objects.filter(station=station_obj, timestamp=ts).exists():
+                        AirQualityReading.objects.create(
+                            station=station_obj,
+                            timestamp=ts,
+                            aqi=None,
+                            pm1=mapped_values.get('pm1') or 0,
+                            pm25=mapped_values.get('pm25') or 0,
+                            pm10=mapped_values.get('pm10') or 0,
+                            temperature=mapped_values.get('temperature') or 0,
+                            humidity=mapped_values.get('humidity') or 0,
+                        )
         # Merge PMS and DHT readings for each station/timestamp
         results = []
         for (station, rounded_dt), readings in station_data.items():
