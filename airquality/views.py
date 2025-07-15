@@ -11,6 +11,9 @@ from rest_framework import filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django.http import HttpResponse
 import csv
+from rest_framework.decorators import api_view
+from rest_framework.generics import ListAPIView
+from django.utils.dateparse import parse_date
 
 # Create your views here.
 
@@ -227,3 +230,29 @@ class SensorNowProxy(APIView):
                 if 'humidity' in r: merged['humidity'] = r['humidity']
             results.append(merged)
         return Response(results)
+
+class StationReadingsByIdView(ListAPIView):
+    serializer_class = AirQualityReadingSerializer
+    def get_queryset(self):
+        station_id = self.kwargs['station_id']
+        start = self.request.query_params.get('start')
+        end = self.request.query_params.get('end')
+        qs = AirQualityReading.objects.filter(station__id=station_id)
+        if start:
+            qs = qs.filter(timestamp__date__gte=start)
+        if end:
+            qs = qs.filter(timestamp__date__lte=end)
+        return qs
+
+class StationReadingsByNameView(ListAPIView):
+    serializer_class = AirQualityReadingSerializer
+    def get_queryset(self):
+        station_name = self.kwargs['station_name']
+        start = self.request.query_params.get('start')
+        end = self.request.query_params.get('end')
+        qs = AirQualityReading.objects.filter(station__name__iexact=station_name)
+        if start:
+            qs = qs.filter(timestamp__date__gte=start)
+        if end:
+            qs = qs.filter(timestamp__date__lte=end)
+        return qs
