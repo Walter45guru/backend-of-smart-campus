@@ -7,6 +7,10 @@ from rest_framework.response import Response
 import requests
 import logging
 logger = logging.getLogger(__name__)
+from rest_framework import filters
+from django_filters.rest_framework import DjangoFilterBackend
+from django.http import HttpResponse
+import csv
 
 # Create your views here.
 
@@ -17,6 +21,60 @@ class AirStationViewSet(viewsets.ModelViewSet):
 class AirQualityReadingViewSet(viewsets.ModelViewSet):
     queryset = AirQualityReading.objects.all()
     serializer_class = AirQualityReadingSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ['station']
+    search_fields = ['station__name']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        station = self.request.query_params.get('station')
+        start = self.request.query_params.get('start')
+        end = self.request.query_params.get('end')
+        if station:
+            # Allow filter by station id or name
+            if station.isdigit():
+                queryset = queryset.filter(station__id=station)
+            else:
+                queryset = queryset.filter(station__name__iexact=station)
+        if start:
+            queryset = queryset.filter(timestamp__date__gte=start)
+        if end:
+            queryset = queryset.filter(timestamp__date__lte=end)
+        return queryset
+
+class AirQualityReadingExportView(APIView):
+    def get(self, request):
+        station = request.query_params.get('station')
+        start = request.query_params.get('start')
+        end = request.query_params.get('end')
+        queryset = AirQualityReading.objects.all()
+        if station:
+            if station.isdigit():
+                queryset = queryset.filter(station__id=station)
+            else:
+                queryset = queryset.filter(station__name__iexact=station)
+        if start:
+            queryset = queryset.filter(timestamp__date__gte=start)
+        if end:
+            queryset = queryset.filter(timestamp__date__lte=end)
+        # CSV export
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="airquality_readings.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['id', 'station', 'timestamp', 'aqi', 'pm1', 'pm25', 'pm10', 'temperature', 'humidity'])
+        for reading in queryset:
+            writer.writerow([
+                reading.id,
+                reading.station.name if reading.station else '',
+                reading.timestamp,
+                reading.aqi,
+                reading.pm1,
+                reading.pm25,
+                reading.pm10,
+                reading.temperature,
+                reading.humidity
+            ])
+        return response
 
 SENSOR_LABELS = {
     4898: {'station': 'esp8266-14114907', 'type': 'PMS'},
